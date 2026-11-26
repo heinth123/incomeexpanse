@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Expense Tracker & Analytics</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.4);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.7);
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased selection:bg-brand-500 selection:text-white">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+  <!-- Header / Navbar -->
+  <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2.5 bg-gradient-to-tr from-brand-600 to-indigo-400 rounded-xl shadow-lg shadow-brand-500/20 text-white">
+          <i class="fa-solid fa-wallet text-xl"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight tracking-wide text-white">နေ့စဉ်အသုံးစရိတ်နှင့်ဝင်ငွေ</h1>
+          <p class="text-xs text-slate-400">Expense & Income Analytics Manager</p>
+        </div>
+      </div>
+
+      <!-- Action Tools & Navigation -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Dashboard Tools (Visible ONLY when Logged In) -->
+        <div id="admin-header-tools" class="hidden flex items-center gap-2 sm:gap-3">
+          <label for="import-file-input" class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm px-3 py-2 rounded-lg border border-slate-700 transition flex items-center gap-2">
+            <i class="fa-solid fa-file-import text-brand-500"></i>
+            <span class="hidden sm:inline">Import JSON</span>
+          </label>
+          <input type="file" id="import-file-input" accept=".json" class="hidden">
+
+          <button id="export-json-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs sm:text-sm px-3 py-2 rounded-lg border border-slate-700 transition flex items-center gap-2">
+            <i class="fa-solid fa-file-export text-emerald-400"></i>
+            <span class="hidden sm:inline">Export JSON</span>
+          </button>
+
+          <button id="reset-data-btn" class="bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/50 text-xs sm:text-sm px-3 py-2 rounded-lg transition flex items-center gap-2" title="Clear all local data">
+            <i class="fa-solid fa-trash-can"></i>
+            <span class="hidden md:inline">Reset</span>
+          </button>
+
+          <button id="logout-btn" class="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-xs sm:text-sm px-3.5 py-2 rounded-lg transition font-medium flex items-center gap-2">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Logout</span>
+          </button>
+        </div>
+
+        <!-- Review / Login Trigger (Visible ONLY when Logged Out) -->
+        <button id="open-login-btn" class="bg-brand-600 hover:bg-brand-500 text-white text-xs sm:text-sm px-4 py-2 rounded-lg shadow-lg shadow-brand-600/30 font-medium transition flex items-center gap-2">
+          <i class="fa-solid fa-chart-line"></i>
+          <span>Review Data</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Expense Entry Form Section (Always Visible) -->
+    <div id="entry-form-container" class="max-w-2xl mx-auto transition-all duration-300">
+      <section class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-xl backdrop-blur">
+        <div class="flex items-center justify-between mb-4 border-b border-slate-700/50 pb-3">
+          <h2 class="text-base font-semibold text-white flex items-center gap-2">
+            <i class="fa-solid fa-circle-plus text-brand-500"></i>
+            <span id="form-title">Add Record (ငွေသွင်း/ငွေထုတ်)</span>
+          </h2>
+          <button id="cancel-edit-btn" class="hidden text-xs text-slate-400 hover:text-white underline">
+            Cancel Edit
+          </button>
+        </div>
+
+        <form id="expense-form" class="space-y-4">
+          <input type="hidden" id="expense-id">
+
+          <!-- Transaction Type Toggle (Income vs Expense) -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Transaction Type</label>
+            <div class="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-lg border border-slate-700">
+              <label class="cursor-pointer">
+                <input type="radio" name="entry-type" value="expense" checked class="peer hidden">
+                <div class="py-1.5 text-center text-xs font-medium rounded-md text-slate-400 peer-checked:bg-red-600 peer-checked:text-white transition flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-arrow-down-long"></i>
+                  <span>Expense (အသုံး)</span>
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="entry-type" value="income" class="peer hidden">
+                <div class="py-1.5 text-center text-xs font-medium rounded-md text-slate-400 peer-checked:bg-emerald-600 peer-checked:text-white transition flex items-center justify-center gap-1.5">
+                  <i class="fa-solid fa-arrow-up-long"></i>
+                  <span>Income (ဝင်ငွေ)</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Amount -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1" for="amount">Amount</label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500"><i class="fa-solid fa-hashtag text-xs"></i></span>
+              <input type="number" id="amount" step="0.01" min="0.01" placeholder="0.00" required
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+            </div>
+          </div>
+
+          <!-- Category & Payment Method Grid -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1" for="category">Category</label>
+              <select id="category" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                <optgroup label="Expenses (အသုံး)">
+                  <option value="Food & Dining">ကျောင်းသွားမုန့်ဖိုး</option>
+                  <option value="Shopping">အိမ်သုံးစျေးဝယ်</option>
+                  <option value="Housing & Utilities">အိမ်သုံးအခြားစရိတ်</option>
+                  <option value="Transportation">ခရီးစရိတ်</option>
+                  <option value="Entertainment">Entertainment</option>
+                  <option value="Healthcare">ကျန်းမာရေးစရိတ်</option>
+                  <option value="Bills & Subscriptions">ဘေပေးဆောင်မှု</option>
+                  <option value="Other Expense">Other Expense</option>
+                </optgroup>
+                <optgroup label="Income (ဝင်ငွေ)">
+                  <option value="Salary">လစာ / စိတ္ကြိုက်ဝယ်ယူခ</option>
+                  <option value="Business & Sales">အရောင်းအဝယ် / စီးပွားရေး</option>
+                  <option value="Allowance">မုန့်ဖိုး / ထောက်ပံ့ကြေး</option>
+                  <option value="Investments">ရင်းနှီးမြှုပ်နှံမှု</option>
+                  <option value="Other Income">Other Income</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1" for="payment-method">Account / Method</label>
+              <select id="payment-method" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+                <option value="Cash">Cash</option>
+                <option value="Credit Card">Kpay AZL</option>
+                <option value="Debit Card">Kpay PTM</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Digital Wallet">Digital Wallet</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Date -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1" for="expense-date">Date</label>
+            <input type="date" id="expense-date" required
+              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition">
+          </div>
+
+          <!-- Description & Keywords -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1" for="description">Description / Keywords</label>
+            <textarea id="description" rows="2" placeholder="e.g. Daily sales revenue, bonus, #salary..." required
+              class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition resize-none"></textarea>
+            <p class="text-[10px] text-slate-400 mt-1">Use keywords or hashtags to easily search later.</p>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="submit-btn" class="w-full bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium py-2.5 rounded-lg shadow-lg shadow-brand-600/30 transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-plus"></i>
+            <span>Save Record</span>
+          </button>
+        </form>
+      </section>
+    </div>
+
+    <!-- Review Dashboard Container (Hidden by Default until Logged In) -->
+    <div id="dashboard-view" class="hidden space-y-6 transition-all duration-300">
+      
+      <!-- Summary Metrics & Quick Filters Overview -->
+      <div class="flex flex-col gap-6">
+        
+        <!-- Summary Cards Grid (Income, Expenses, Net Balance) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <!-- Total Income Card -->
+          <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 shadow-md">
+            <div class="flex items-center justify-between text-slate-400 mb-2">
+              <span class="text-xs font-medium">Total Income (ဝင်ငွေ)</span>
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-arrow-down-left text-sm"></i>
+              </div>
+            </div>
+            <div class="text-xl sm:text-2xl font-bold text-emerald-400 tracking-tight" id="stat-total-income">0.00</div>
+            <div class="text-[11px] text-slate-400 mt-1">Total incoming funds</div>
+          </div>
+
+          <!-- Total Expenses Card -->
+          <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 shadow-md">
+            <div class="flex items-center justify-between text-slate-400 mb-2">
+              <span class="text-xs font-medium">Total Expenses (အသုံး)</span>
+              <div class="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-arrow-up-right text-sm"></i>
+              </div>
+            </div>
+            <div class="text-xl sm:text-2xl font-bold text-red-400 tracking-tight" id="stat-total-spent">0.00</div>
+            <div class="text-[11px] text-slate-400 mt-1">Total outgoing expenses</div>
+          </div>
+
+          <!-- Net Balance Card -->
+          <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 shadow-md">
+            <div class="flex items-center justify-between text-slate-400 mb-2">
+              <span class="text-xs font-medium">Net Balance (လက်ကျန်)</span>
+              <div class="w-8 h-8 rounded-lg bg-brand-500/10 text-brand-400 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-scale-balanced"></i>
+              </div>
+            </div>
+            <div class="text-xl sm:text-2xl font-bold text-white tracking-tight" id="stat-net-balance">0.00</div>
+            <div class="text-[11px] text-slate-400 mt-1">Income minus expenses</div>
+          </div>
+        </div>
+
+        <!-- Filter & Time-Period Bar -->
+        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl space-y-4">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-700/50 pb-3">
+            
+            <!-- Time-Based Breakout Tabs -->
+            <div class="flex bg-slate-900/90 p-1 rounded-xl border border-slate-700/60 w-full sm:w-auto">
+              <button class="time-tab text-xs px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-period="daily">Daily</button>
+              <button class="time-tab text-xs px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-period="monthly">Monthly</button>
+              <button class="time-tab text-xs px-3 py-1.5 rounded-lg font-medium transition text-slate-400 hover:text-white" data-period="yearly">Yearly</button>
+              <button class="time-tab active-tab text-xs px-3 py-1.5 rounded-lg font-medium transition bg-brand-600 text-white" data-period="all">All Time</button>
+            </div>
+
+            <!-- Custom Keyword Search Box -->
+            <div class="relative w-full sm:w-64">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-500"></i>
+              <input type="text" id="keyword-search" placeholder="Search keywords or description..."
+                class="w-full bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+            </div>
+          </div>
+
+          <!-- Extended Filters -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Filter Category</label>
+              <select id="filter-category" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500">
+                <option value="ALL">All Categories</option>
+                <optgroup label="Expenses">
+                  <option value="Food & Dining">ကျောင်းသွားမုန့်ဖိုး</option>
+                  <option value="Shopping">အိမ်သုံးစျေးဝယ်</option>
+                  <option value="Housing & Utilities">အိမ်သုံးအခြားစရိတ်</option>
+                  <option value="Transportation">ခရီးစရိတ်</option>
+                  <option value="Entertainment">Entertainment</option>
+                  <option value="Healthcare">ကျန်းမာရေးစရိတ်</option>
+                  <option value="Bills & Subscriptions">ဘေပေးဆောင်မှု</option>
+                  <option value="Other Expense">Other Expense</option>
+                </optgroup>
+                <optgroup label="Income">
+                  <option value="Salary">လစာ / စိတ္ကြိုက်ဝယ်ယူခ</option>
+                  <option value="Business & Sales">အရောင်းအဝယ် / စီးပွားရေး</option>
+                  <option value="Allowance">မုန့်ဖိုး / ထောက်ပံ့ကြေး</option>
+                  <option value="Investments">ရင်းနှီးမြှုပ်နှံမှု</option>
+                  <option value="Other Income">Other Income</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Filter Payment</label>
+              <select id="filter-payment" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500">
+                <option value="ALL">All Payment Methods</option>
+                <option value="Cash">Cash</option>
+                <option value="Credit Card">Kpay AZL</option>
+                <option value="Debit Card">Kpay PTM</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Digital Wallet">Digital Wallet</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] text-slate-400 mb-1">Custom Date Range</label>
+              <div class="flex items-center gap-1">
+                <input type="date" id="filter-date-start" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px] text-white focus:outline-none focus:border-brand-500">
+                <span class="text-slate-500 text-xs">-</span>
+                <input type="date" id="filter-date-end" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px] text-white focus:outline-none focus:border-brand-500">
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Analytics & Charts Section -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+        
+        <!-- Category Breakdown Chart (Doughnut) -->
+        <div class="md:col-span-5 bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Spending by Category</h3>
+            <i class="fa-solid fa-chart-pie text-slate-500 text-sm"></i>
+          </div>
+          <div class="relative flex-1 min-h-[220px] flex items-center justify-center">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Expense Trend Over Time Chart (Line/Bar) -->
+        <div class="md:col-span-7 bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Timeline Net Trend</h3>
+            <i class="fa-solid fa-chart-line text-slate-500 text-sm"></i>
+          </div>
+          <div class="relative flex-1 min-h-[220px] flex items-center justify-center">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Data Table & History Section -->
+      <section class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-700/50 pb-3">
+          <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-brand-500"></i>
+            All Transactions (<span id="record-count">0</span>)
+          </h3>
+          <div class="text-xs text-slate-400">
+            Income & Expense ledger records
+          </div>
+        </div>
+
+        <!-- Responsive Table Container -->
+        <div class="overflow-x-auto rounded-xl border border-slate-700/50">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-900/80 text-slate-400 font-medium border-b border-slate-700/60 uppercase tracking-wider">
+              <tr>
+                <th class="py-3 px-4">Date</th>
+                <th class="py-3 px-4">Type</th>
+                <th class="py-3 px-4">Category</th>
+                <th class="py-3 px-4">Description</th>
+                <th class="py-3 px-4">Method</th>
+                <th class="py-3 px-4 text-right">Amount</th>
+                <th class="py-3 px-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="expense-table-body" class="divide-y divide-slate-700/40 text-slate-300">
+              <!-- Rows injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="hidden py-12 text-center text-slate-500 space-y-2">
+          <i class="fa-solid fa-folder-open text-4xl text-slate-600"></i>
+          <p class="text-sm">No transaction records found matching current filters.</p>
+          <p class="text-xs text-slate-600">Add an income or expense record or clear filters.</p>
+        </div>
+
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- Login Modal -->
+  <div id="login-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl relative">
+      <button id="close-login-btn" class="absolute top-4 right-4 text-slate-400 hover:text-white transition">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="flex items-center gap-3 border-b border-slate-800 pb-4">
+        <div class="p-2.5 bg-brand-600/20 text-brand-400 rounded-xl border border-brand-500/30">
+          <i class="fa-solid fa-lock text-lg"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white">Review Data Login</h3>
+          <p class="text-xs text-slate-400">Enter credentials (admin / admin123)</p>
+        </div>
+      </div>
+
+      <form id="login-form" class="space-y-4">
+        <div id="login-error-msg" class="hidden text-xs text-red-400 bg-red-950/50 border border-red-800/50 p-2.5 rounded-lg flex items-center gap-2">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>Invalid username or password.</span>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1" for="login-username">Username</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500"><i class="fa-solid fa-user text-xs"></i></span>
+            <input type="text" id="login-username" required placeholder="admin"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-brand-500 transition">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1" for="login-password">Password</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500"><i class="fa-solid fa-key text-xs"></i></span>
+            <input type="password" id="login-password" required placeholder="••••••••"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg pl-8 pr-10 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-brand-500 transition">
+            <button type="button" id="toggle-password-btn" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300">
+              <i class="fa-solid fa-eye text-xs" id="password-toggle-icon"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="w-full bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium py-2.5 rounded-lg shadow-lg shadow-brand-600/30 transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-right-to-bracket"></i>
+          <span>Authenticate & Access</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Confirm Reset Modal -->
+  <div id="reset-modal" class="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center gap-3 text-red-400">
+        <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+        <h3 class="text-lg font-bold text-white">Clear All Records?</h3>
+      </div>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        This action will erase all saved income and expense records from LocalStorage. Consider exporting your data to JSON first.
+      </p>
+      <div class="flex items-center justify-end gap-3 pt-2">
+        <button id="cancel-reset-btn" class="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition">Cancel</button>
+        <button id="confirm-reset-btn" class="px-4 py-2 text-xs bg-red-600 hover:bg-red-500 text-white rounded-lg transition font-medium">Delete Everything</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    const STORAGE_KEY = 'spendpulse_transactions_data_v2';
+    const AUTH_KEY = 'spendpulse_is_authenticated';
+
+    const DEFAULT_DATA = [
+      { id: '1', type: 'income', date: '2026-10-28', amount: 500.00, category: 'Salary', paymentMethod: 'Bank Transfer', description: 'Monthly Salary payout #salary' },
+      { id: '2', type: 'expense', date: '2026-10-28', amount: 45.50, category: 'Food & Dining', paymentMethod: 'Credit Card', description: 'Weekly Groceries at FreshMarket #food' },
+      { id: '3', type: 'expense', date: '2026-10-29', amount: 12.00, category: 'Transportation', paymentMethod: 'Digital Wallet', description: 'Metro pass recharge #commute' },
+      { id: '4', type: 'income', date: '2026-10-30', amount: 150.00, category: 'Business & Sales', paymentMethod: 'Credit Card', description: 'Client side gig payment #sales' }
+    ];
+
+    let expenses = [];
+    let currentPeriodFilter = 'all';
+    let isAuthenticated = false;
+    let categoryChartInstance = null;
+    let trendChartInstance = null;
+
+    // DOM Elements
+    const dashboardView = document.getElementById('dashboard-view');
+    const adminHeaderTools = document.getElementById('admin-header-tools');
+    const openLoginBtn = document.getElementById('open-login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    const loginModal = document.getElementById('login-modal');
+    const closeLoginBtn = document.getElementById('close-login-btn');
+    const loginForm = document.getElementById('login-form');
+    const loginUsernameInput = document.getElementById('login-username');
+    const loginPasswordInput = document.getElementById('login-password');
+    const loginErrorMsg = document.getElementById('login-error-msg');
+    const togglePasswordBtn = document.getElementById('toggle-password-btn');
+    const passwordToggleIcon = document.getElementById('password-toggle-icon');
+
+    const form = document.getElementById('expense-form');
+    const formTitle = document.getElementById('form-title');
+    const cancelEditBtn = document.getElementById('cancel-edit-btn');
+    const expenseIdInput = document.getElementById('expense-id');
+    const amountInput = document.getElementById('amount');
+    const categoryInput = document.getElementById('category');
+    const paymentMethodInput = document.getElementById('payment-method');
+    const dateInput = document.getElementById('expense-date');
+    const descriptionInput = document.getElementById('description');
+
+    const tableBody = document.getElementById('expense-table-body');
+    const emptyState = document.getElementById('empty-state');
+    const recordCountEl = document.getElementById('record-count');
+
+    const keywordInput = document.getElementById('keyword-search');
+    const filterCategorySelect = document.getElementById('filter-category');
+    const filterPaymentSelect = document.getElementById('filter-payment');
+    const filterDateStart = document.getElementById('filter-date-start');
+    const filterDateEnd = document.getElementById('filter-date-end');
+    const timeTabs = document.querySelectorAll('.time-tab');
+
+    const exportBtn = document.getElementById('export-json-btn');
+    const importInput = document.getElementById('import-file-input');
+    const resetDataBtn = document.getElementById('reset-data-btn');
+    const resetModal = document.getElementById('reset-modal');
+    const cancelResetBtn = document.getElementById('cancel-reset-btn');
+    const confirmResetBtn = document.getElementById('confirm-reset-btn');
+
+    // Initialize App
+    window.addEventListener('DOMContentLoaded', () => {
+      dateInput.value = new Date().toISOString().split('T')[0];
+      loadExpenses();
+      checkAuthStatus();
+      initChartInstances();
+      setupEventListeners();
+      render();
+    });
+
+    function checkAuthStatus() {
+      isAuthenticated = localStorage.getItem(AUTH_KEY) === 'true';
+      applyAuthStateUI();
+    }
+
+    function applyAuthStateUI() {
+      if (isAuthenticated) {
+        dashboardView.classList.remove('hidden');
+        adminHeaderTools.classList.remove('hidden');
+        openLoginBtn.classList.add('hidden');
+      } else {
+        dashboardView.classList.add('hidden');
+        adminHeaderTools.classList.add('hidden');
+        openLoginBtn.classList.remove('hidden');
+      }
+    }
+
+    function showToast(message, type = 'info') {
+      const toastContainer = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      const colors = {
+        success: 'bg-emerald-900/90 border-emerald-600 text-emerald-200',
+        error: 'bg-red-900/90 border-red-600 text-red-200',
+        info: 'bg-slate-800/90 border-brand-500 text-brand-200'
+      };
+
+      const icons = {
+        success: 'fa-circle-check text-emerald-400',
+        error: 'fa-circle-xmark text-red-400',
+        info: 'fa-circle-info text-brand-400'
+      };
+
+      toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border text-xs font-medium shadow-2xl backdrop-blur transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type] || colors.info}`;
+      toast.innerHTML = `
+        <i class="fa-solid ${icons[type] || icons.info} text-base"></i>
+        <span class="flex-1">${message}</span>
+      `;
+
+      toastContainer.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.remove('translate-y-2', 'opacity-0'));
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function loadExpenses() {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        try {
+          expenses = JSON.parse(stored);
+        } catch (e) {
+          expenses = [...DEFAULT_DATA];
+          saveExpenses();
+        }
+      } else {
+        expenses = [...DEFAULT_DATA];
+        saveExpenses();
+      }
+    }
+
+    function saveExpenses() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(expenses));
+    }
+
+    function setupEventListeners() {
+      openLoginBtn.addEventListener('click', () => {
+        loginErrorMsg.classList.add('hidden');
+        loginForm.reset();
+        loginModal.classList.remove('hidden');
+        loginModal.classList.add('flex');
+        loginUsernameInput.focus();
+      });
+
+      closeLoginBtn.addEventListener('click', () => {
+        loginModal.classList.add('hidden');
+        loginModal.classList.remove('flex');
+      });
+
+      togglePasswordBtn.addEventListener('click', () => {
+        const type = loginPasswordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+        loginPasswordInput.setAttribute('type', type);
+        passwordToggleIcon.className = type === 'password' ? 'fa-solid fa-eye text-xs' : 'fa-solid fa-eye-slash text-xs';
+      });
+
+      loginForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const username = loginUsernameInput.value.trim();
+        const password = loginPasswordInput.value.trim();
+
+        if (username === 'admin' && password === 'admin123') {
+          isAuthenticated = true;
+          localStorage.setItem(AUTH_KEY, 'true');
+          loginModal.classList.add('hidden');
+          loginModal.classList.remove('flex');
+          applyAuthStateUI();
+          render();
+          showToast('Successfully authenticated!', 'success');
+        } else {
+          loginErrorMsg.classList.remove('hidden');
+        }
+      });
+
+      logoutBtn.addEventListener('click', () => {
+        isAuthenticated = false;
+        localStorage.setItem(AUTH_KEY, 'false');
+        applyAuthStateUI();
+        showToast('Logged out successfully', 'info');
+      });
+
+      // Form submission for Income/Expense
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const selectedType = document.querySelector('input[name="entry-type"]:checked').value;
+        const newEntry = {
+          id: expenseIdInput.value || Date.now().toString(),
+          type: selectedType,
+          amount: parseFloat(amountInput.value),
+          category: categoryInput.value,
+          paymentMethod: paymentMethodInput.value,
+          date: dateInput.value,
+          description: descriptionInput.value
+        };
+
+        if (expenseIdInput.value) {
+          const idx = expenses.findIndex(item => item.id === expenseIdInput.value);
+          if (idx !== -1) expenses[idx] = newEntry;
+          cancelEditMode();
+        } else {
+          expenses.unshift(newEntry);
+        }
+
+        saveExpenses();
+        form.reset();
+        expenseIdInput.value = '';
+        dateInput.value = new Date().toISOString().split('T')[0];
+        // Reset radio back to expense default
+        document.querySelector('input[name="entry-type"][value="expense"]').checked = true;
+        render();
+        showToast(selectedType === 'income' ? 'Income record saved successfully' : 'Expense record saved successfully', 'success');
+      });
+
+      cancelEditBtn.addEventListener('click', () => {
+        cancelEditMode();
+        form.reset();
+        dateInput.value = new Date().toISOString().split('T')[0];
+      });
+
+      // Filter and Search Event Listeners
+      keywordInput.addEventListener('input', render);
+      filterCategorySelect.addEventListener('change', render);
+      filterPaymentSelect.addEventListener('change', render);
+      filterDateStart.addEventListener('change', render);
+      filterDateEnd.addEventListener('change', render);
+
+      timeTabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+          timeTabs.forEach(t => t.classList.remove('active-tab', 'bg-brand-600', 'text-white'));
+          timeTabs.forEach(t => t.classList.add('text-slate-400'));
+          e.target.classList.add('active-tab', 'bg-brand-600', 'text-white');
+          e.target.classList.remove('text-slate-400');
+          currentPeriodFilter = e.target.getAttribute('data-period');
+          render();
+        });
+      });
+
+      // Export / Import / Reset JSON
+      exportBtn.addEventListener('click', () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(expenses, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `ledger_export_${new Date().toISOString().split('T')[0]}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        showToast('JSON data exported successfully', 'success');
+      });
+
+      importInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          try {
+            const parsed = JSON.parse(event.target.result);
+            if (Array.isArray(parsed)) {
+              expenses = parsed;
+              saveExpenses();
+              render();
+              showToast(`Successfully imported ${parsed.length} records`, 'success');
+            } else {
+              showToast('Invalid JSON file format', 'error');
+            }
+          } catch (err) {
+            showToast('Error parsing JSON file', 'error');
+          }
+          importInput.value = '';
+        };
+        reader.readAsText(file);
+      });
+
+      resetDataBtn.addEventListener('click', () => {
+        resetModal.classList.remove('hidden');
+        resetModal.classList.add('flex');
+      });
+
+      cancelResetBtn.addEventListener('click', () => {
+        resetModal.classList.add('hidden');
+        resetModal.classList.remove('flex');
+      });
+
+      confirmResetBtn.addEventListener('click', () => {
+        expenses = [];
+        saveExpenses();
+        resetModal.classList.add('hidden');
+        resetModal.classList.remove('flex');
+        render();
+        showToast('All records cleared', 'info');
+      });
+    }
+
+    function cancelEditMode() {
+      expenseIdInput.value = '';
+      formTitle.textContent = 'Add Record (ငွေသွင်း/ငွေထုတ်)';
+      submitBtn.innerHTML = '<i class="fa-solid fa-plus"></i><span>Save Record</span>';
+      cancelEditBtn.classList.add('hidden');
+    }
+
+    function editRecord(id) {
+      const entry = expenses.find(item => item.id === id);
+      if (!entry) return;
+
+      expenseIdInput.value = entry.id;
+      const targetRadio = document.querySelector(`input[name="entry-type"][value="${entry.type || 'expense'}"]`);
+      if (targetRadio) targetRadio.checked = true;
+
+      amountInput.value = entry.amount;
+      categoryInput.value = entry.category;
+      paymentMethodInput.value = entry.paymentMethod;
+      dateInput.value = entry.date;
+      descriptionInput.value = entry.description;
+
+      formTitle.textContent = 'Edit Record';
+      submitBtn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i><span>Update Record</span>';
+      cancelEditBtn.classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteRecord(id) {
+      expenses = expenses.filter(item => item.id !== id);
+      saveExpenses();
+      render();
+      showToast('Record deleted', 'info');
+    }
+
+    function getFilteredData() {
+      const keyword = keywordInput.value.toLowerCase().trim();
+      const catFilter = filterCategorySelect.value;
+      const payFilter = filterPaymentSelect.value;
+      const startDate = filterDateStart.value;
+      const endDate = filterDateEnd.value;
+
+      return expenses.filter(item => {
+        // Keyword match
+        if (keyword) {
+          const matchDesc = item.description && item.description.toLowerCase().includes(keyword);
+          const matchCat = item.category && item.category.toLowerCase().includes(keyword);
+          if (!matchDesc && !matchCat) return false;
+        }
+
+        // Category match
+        if (catFilter !== 'ALL' && item.category !== catFilter) return false;
+
+        // Payment match
+        if (payFilter !== 'ALL' && item.paymentMethod !== payFilter) return false;
+
+        // Custom Date Range match
+        if (startDate && item.date < startDate) return false;
+        if (endDate && item.date > endDate) return false;
+
+        // Period tab filter
+        if (currentPeriodFilter !== 'all') {
+          const itemDate = new Date(item.date);
+          const now = new Date();
+          if (currentPeriodFilter === 'daily') {
+            if (item.date !== now.toISOString().split('T')[0]) return false;
+          } else if (currentPeriodFilter === 'monthly') {
+            if (itemDate.getMonth() !== now.getMonth() || itemDate.getFullYear() !== now.getFullYear()) return false;
+          } else if (currentPeriodFilter === 'yearly') {
+            if (itemDate.getFullYear() !== now.getFullYear()) return false;
+          }
+        }
+
+        return true;
+      });
+    }
+
+    function render() {
+      if (!isAuthenticated) return;
+
+      const filtered = getFilteredData();
+      recordCountEl.textContent = filtered.length;
+
+      // Calculate Summary stats
+      let totalIncome = 0;
+      let totalExpenses = 0;
+
+      filtered.forEach(item => {
+        const val = parseFloat(item.amount) || 0;
+        if (item.type === 'income') {
+          totalIncome += val;
+        } else {
+          totalExpenses += val;
+        }
+      });
+
+      const netBalance = totalIncome - totalExpenses;
+
+      document.getElementById('stat-total-income').textContent = totalIncome.toLocaleString(undefined, { minimumFractionDigits: 2 });
+      document.getElementById('stat-total-spent').textContent = totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 });
+      
+      const balanceEl = document.getElementById('stat-net-balance');
+      balanceEl.textContent = netBalance.toLocaleString(undefined, { minimumFractionDigits: 2 });
+      balanceEl.className = `text-xl sm:text-2xl font-bold tracking-tight ${netBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+
+      // Render Table Records
+      tableBody.innerHTML = '';
+      if (filtered.length === 0) {
+        emptyState.classList.remove('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        filtered.forEach(item => {
+          const isIncome = item.type === 'income';
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-900/40 transition';
+          tr.innerHTML = `
+            <td class="py-3 px-4 font-mono text-slate-300">${item.date}</td>
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${isIncome ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' : 'bg-red-950 text-red-400 border border-red-800/50'}">
+                <i class="fa-solid ${isIncome ? 'fa-arrow-up-long' : 'fa-arrow-down-long'}"></i>
+                ${isIncome ? 'Income' : 'Expense'}
+              </span>
+            </td>
+            <td class="py-3 px-4 font-medium text-white">${item.category}</td>
+            <td class="py-3 px-4 text-slate-300 max-w-xs truncate" title="${item.description}">${item.description}</td>
+            <td class="py-3 px-4 text-slate-400">${item.paymentMethod}</td>
+            <td class="py-3 px-4 text-right font-mono font-semibold ${isIncome ? 'text-emerald-400' : 'text-red-400'}">
+              ${isIncome ? '+' : '-'}${parseFloat(item.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </td>
+            <td class="py-3 px-4 text-center">
+              <div class="flex items-center justify-center gap-2">
+                <button onclick="editRecord('${item.id}')" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition" title="Edit">
+                  <i class="fa-solid fa-pen text-[10px]"></i>
+                </button>
+                <button onclick="deleteRecord('${item.id}')" class="p-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 rounded transition" title="Delete">
+                  <i class="fa-solid fa-trash text-[10px]"></i>
+                </button>
+              </div>
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      }
+
+      updateCharts(filtered);
+    }
+
+    function initChartInstances() {
+      const ctxCat = document.getElementById('categoryChart').getContext('2d');
+      categoryChartInstance = new Chart(ctxCat, {
+        type: 'doughnut',
+        data: { labels: [], datasets: [{ data: [], backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#3b82f6', '#14b8a6'] }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 }, color: '#94a3b8' } } } }
+      });
+
+      const ctxTrend = document.getElementById('trendChart').getContext('2d');
+      trendChartInstance = new Chart(ctxTrend, {
+        type: 'bar',
+        data: { labels: [], datasets: [
+          { label: 'Income', data: [], backgroundColor: '#10b981', borderRadius: 4 },
+          { label: 'Expense', data: [], backgroundColor: '#ef4444', borderRadius: 4 }
+        ]},
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          scales: { 
+            x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+            y: { grid: { color: 'rgba(51, 65, 85, 0.3)' }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+          },
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 }, color: '#94a3b8' } } } 
+        }
+      });
+    }
+
+    function updateCharts(filtered) {
+      // Category Breakdown (for Expenses)
+      const catTotals = {};
+      filtered.filter(i => i.type !== 'income').forEach(item => {
+        catTotals[item.category] = (catTotals[item.category] || 0) + parseFloat(item.amount);
+      });
+
+      categoryChartInstance.data.labels = Object.keys(catTotals);
+      categoryChartInstance.data.datasets[0].data = Object.values(catTotals);
+      categoryChartInstance.update();
+
+      // Timeline Trend (grouped by date)
+      const dateMap = {};
+      filtered.forEach(item => {
+        if (!dateMap[item.date]) dateMap[item.date] = { income: 0, expense: 0 };
+        if (item.type === 'income') {
+          dateMap[item.date].income += parseFloat(item.amount);
+        } else {
+          dateMap[item.date].expense += parseFloat(item.amount);
+        }
+      });
+
+      const sortedDates = Object.keys(dateMap).sort();
+      trendChartInstance.data.labels = sortedDates;
+      trendChartInstance.data.datasets[0].data = sortedDates.map(d => dateMap[d].income);
+      trendChartInstance.data.datasets[1].data = sortedDates.map(d => dateMap[d].expense);
+      trendChartInstance.update();
+    }
+  </script>
+</body>
+</html>
